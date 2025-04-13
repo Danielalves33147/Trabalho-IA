@@ -37,7 +37,42 @@ def frase_busca():
         "Espere. Sim, encontrei algo entre as teias do conhecimento."
     ])
 
-def frase_sarcasmo(nome):
+def frase_sarcasmo(nome, tipo=None, fonte=None):
+    nome = nome.strip()
+    tipo = (tipo or "").lower()
+    fonte = (fonte or "").lower()
+
+    if tipo == "talento":
+        return random.choice([
+            f"Hmm... '{nome}', uma dessas 'proezas' que os jovens acham que dominam.",
+            f"'{nome}'... Sim, claro, o atalho dos que evitam treinar de verdade.",
+            f"A velha arte de '{nome}'. Poucos entendem, muitos fingem.",
+            f"Você quer saber sobre '{nome}'? Que escolha... ousada, no mínimo.",
+        ])
+
+    if tipo == "item_magico":
+        if "lendário" in fonte:
+            return random.choice([
+                f"'{nome}'... Ah, relíquia das eras. Poucos sobreviveram ao tocá-lo.",
+                f"Aquele que empunha '{nome}' carrega maldição e glória.",
+                f"Você ousa perguntar por '{nome}'? Que insolência deliciosa.",
+            ])
+        if "muito raro" in fonte:
+            return random.choice([
+                f"'{nome}'... Não tão lendário, mas ainda capaz de arruinar festas.",
+                f"Você teria que atravessar três planos para encontrar '{nome}'. Boa sorte.",
+            ])
+        if "raro" in fonte:
+            return random.choice([
+                f"'{nome}'... Popular entre aventureiros medíocres e bardos sonhadores.",
+                f"Ah, '{nome}'. Já vi goblins usarem isso de forma mais eficiente.",
+            ])
+        if "incomum" in fonte or "comum" in fonte:
+            return random.choice([
+                f"'{nome}'? Sério? Até um kobold tem isso hoje em dia.",
+                f"Clássico. Barato. Funcional. Entediante como sopa fria.",
+            ])
+
     return random.choice([
         f"Hmm... o velho '{nome}'. Ainda há quem confie nisso?",
         f"Ah, sim... '{nome}'. Usado por heróis desesperados e conjuradores precavidos.",
@@ -46,26 +81,72 @@ def frase_sarcasmo(nome):
         f"'{nome}'... Sim, isso ainda existe. Como os goblins, resistente ao tempo e à lógica."
     ])
 
+
 def tipo_de_pergunta(pergunta):
-    consulta_keywords = [
-        "quanto", "como funciona", "o que faz", "efeito", "bônus", "atributo",
-        "explica", "requisito", "talento", "item", "anel", "espada", "varinha", "poção", "magia", "botas", "armadura"
-    ]
-    criativa_keywords = [
-        "crie", "gere", "invente", "me mostre", "imagine", "criar", "descreva", "construa",
-        "vilão", "missão", "ritual", "encontro", "história", "npc", "cenário"
-    ]
-    p = pergunta.lower()
-    if any(k in p for k in criativa_keywords) and not any(k in p for k in consulta_keywords):
+    p = pergunta.strip().lower()
+
+    # Se começa com verbos criativos, priorizamos isso
+    if any(p.startswith(k) for k in [
+        "crie", "gere", "invente", "descreva", "construa", "imagine", "me mostre"
+    ]):
         return "criativa"
-    return "consulta"
+
+    # Se contém palavras de criação combinadas com tema de RPG
+    if any(k in p for k in [
+        "crie", "gere", "invente", "descreva", "construa", "imagine", "me mostre"
+    ]) and any(k in p for k in [
+        "item", "vilão", "missão", "ritual", "encontro", "história", "npc", "cenário"
+    ]):
+        return "criativa"
+
+    # Consulta se perguntar sobre funcionamento, bônus, requisitos, etc.
+    if any(k in p for k in [
+        "quanto", "como funciona", "o que faz", "efeito", "bônus", "atributo",
+        "explica", "requisito", "faz", "vale", "dá", "cura", "serve", "causa"
+    ]):
+        return "consulta"
+
+    # Fallback: trata como consulta se contiver nomes de objetos ou magias
+    if any(k in p for k in [
+        "talento", "item", "anel", "espada", "varinha", "poção", "magia", "botas", "armadura"
+    ]):
+        return "consulta"
+
+    # Por padrão, se não sabemos, assume criativa
+    return "criativa"
+
 
 def gerar_com_ollama(prompt):
-    prompt_estruturado = f'''
-Você é um mestre de RPG experiente. Quando receber um pedido, você irá gerar uma estrutura narrativa completa e evocativa para uma campanha, com estilo interpretativo e criativo.
+    prompt_estruturado = f"""
+Você é um Grimório Mágico falante e sarcástico, milenar e debochado, mas também um especialista em itens mágicos de RPG.
+
+Quando receber um pedido criativo, você **deve gerar um item mágico completo**, com estrutura semelhante a livros de D&D. 
+Não enrole, não filosófe demais, não explique como obter o item — apenas gere um item com as seguintes seções:
+
+---
+
+**Nome:** [Nome do item]
+
+**Descrição:**  
+[Texto evocativo e breve sobre aparência e origem]
+
+**Raridade:** [Comum / Incomum / Raro / Muito Raro / Lendário]  
+**Sintonização:** [Sim ou Não, e por quem]
+
+**Efeitos:**
+- [Efeito 1 com dados ou bônus]
+- [Efeito 2 opcional]
+- [Efeito 3 opcional]
+
+**Elemento Narrativo:**  
+[Breve curiosidade, risco ou lenda sobre o item]
+
+---
+
+Seja criativo, mas também técnico. Comece com uma breve frase sarcástica antes de apresentar o item.
+
 Pedido: {prompt}
-Responda como um Grimório falante: sarcástico, milenar e um tanto debochado.
-'''
+"""
     comando = ["ollama", "run", "mistral", prompt_estruturado]
     try:
         resultado = subprocess.run(comando, capture_output=True, text=True, encoding="utf-8")
@@ -105,6 +186,24 @@ def classificar_pergunta(pergunta):
     return "ambos"
 
 def buscar(pergunta, tipo):
+    def normalizar(texto):
+        return texto.strip().lower().replace("’", "'")
+
+    texto_busca = normalizar(pergunta)
+
+    # 1. Buscar por nome exato primeiro
+    if tipo in ["talento", "ambos"]:
+        for entrada in origem_talentos:
+            if normalizar(entrada["nome"]) in texto_busca or texto_busca in normalizar(entrada["nome"]):
+
+                return entrada
+    if tipo in ["item", "ambos"]:
+        for entrada in origem_itens:
+            if normalizar(entrada["nome"]) in texto_busca or texto_busca in normalizar(entrada["nome"]):
+
+                return entrada
+
+    # 2. Se não encontrar, usar busca vetorial
     if tipo == "talento":
         vec, mod, origem = vectorizer_tal, modelo_tal, origem_talentos
     elif tipo == "item":
@@ -116,8 +215,8 @@ def buscar(pergunta, tipo):
 
     vetor = vec.transform([pergunta])
     _, idx = mod.kneighbors(vetor, n_neighbors=1)
-    item = origem[idx[0][0]]
-    return item
+    return origem[idx[0][0]]
+
 
 @app.post("/grimorio")
 def consultar_grimorio(body: Pergunta):
@@ -129,7 +228,7 @@ def consultar_grimorio(body: Pergunta):
 
     introducao = frase_busca()
     item = buscar(body.pergunta, classificar_pergunta(body.pergunta))
-    comentario = frase_sarcasmo(item["nome"])
+    comentario = frase_sarcasmo(item["nome"], item.get("tipo"), item.get("fonte"))
     resposta = (
         f"{introducao}\n\n"
         f"Grimório responde, com um suspiro imaginário...\n"
